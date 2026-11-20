@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<title>순천청암고 길안내</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+/* 순천청암고 길안내 — 고정 키오스크(세로 화면) 전용
+   화면 4개: 처음(home) · 건물·층에서 고르기(building) · 선생님 찾기(teacher) · 안내 한 장(guide)
+   출발지는 별관 현관으로 고정. 메인 키오스크(cheongam-kiosk)의 '청암 네비게이션' 메뉴로
+   그 화면 안(iframe)에 열림. 60초 동안 아무도 만지지 않으면 길안내 처음 화면으로. */
+:root{
+  --bg:#eef2f5; --panel:#ffffff; --ink:#15212c; --muted:#5b6b79; --line:#d5dde4;
+  --start:#1f9d6b; --start-soft:#d8f1e6; --route:#1d6fd0; --route-soft:#dce9f8; --dest:#d9512b; --dest-soft:#fbe1d8;
+  --ground:#e4eaee; --bldg:#cfd9e2; --bldg-ink:#2c3d4d; --room:#f8fafc; --corridor:#e9eef2;
+  --lobby:#dbe8f6; --field:#b8d9a0; --garden:#cfe6c0; --road:#ffffff; --stair:#b4c2cf;
+  --font-display:"Black Han Sans","Malgun Gothic",sans-serif;
+  --font-body:"IBM Plex Sans KR","Malgun Gothic",system-ui,sans-serif;
+  color-scheme:light;
+}
+/* 글자 크기는 화면 크기에 맞춰 자동으로 (1080×1920 세로 화면에서 약 24px) */
+html{font-size:clamp(14px,min(2.2vw,1.25vh),32px);height:100%}
+[hidden]{display:none!important}
+*{box-sizing:border-box}
+body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--ink);font-family:var(--font-body);line-height:1.45;
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;touch-action:manipulation;overscroll-behavior:none;-webkit-tap-highlight-color:transparent}
+button{font:inherit;color:inherit;border:0;cursor:pointer;touch-action:manipulation}
+button:active{transform:scale(.98)}
+svg text{-webkit-user-select:none;user-select:none}
+
+.screen{position:absolute;inset:0;display:flex;flex-direction:column;gap:.8rem;padding:1rem 1rem 1.1rem}
+
+/* 공통: 위쪽 줄 (처음으로 + 제목) */
+.topbar{display:flex;align-items:center;gap:.8rem;flex:none}
+.topbar h2{margin:0;font-family:var(--font-display);font-weight:400;font-size:1.7rem;letter-spacing:.01em}
+.home-btn{background:var(--ink);color:#fff;border-radius:1rem;padding:.7rem 1.2rem;font-size:1.15rem;font-weight:700;white-space:nowrap}
+
+/* ── 처음 화면 ── */
+.hhead{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;flex:none}
+.hhead h1{margin:0;font-family:var(--font-display);font-weight:400;font-size:2.6rem;line-height:1.1}
+.hhead .school{font-size:1.05rem;color:var(--muted);font-weight:600}
+.here{display:inline-flex;align-items:center;gap:.5rem;background:var(--start-soft);color:#0f5e40;border-radius:999px;padding:.45rem 1rem;font-size:1.1rem;font-weight:600;white-space:nowrap}
+.here b{font-size:1.25rem}
+.hright{display:flex;flex-direction:column;align-items:flex-end;gap:.5rem}
+.back-btn{background:var(--ink);color:#fff;border-radius:1rem;padding:.7rem 1.2rem;font-size:1.15rem;font-weight:700;white-space:nowrap}
+.cover .back-btn{margin-top:1.4rem}
+.here .dot{width:.8rem;height:.8rem;border-radius:50%;background:var(--start);box-shadow:0 0 0 .25rem rgba(31,157,107,.25)}
+.homemap{flex:1 1 0;min-height:6rem;background:var(--ground);border-radius:1.2rem;overflow:hidden}
+.homemap svg{width:100%;height:100%;display:block}
+.ask{margin:.2rem 0 0;font-family:var(--font-display);font-weight:400;font-size:2.1rem;flex:none}
+.quick{display:grid;grid-template-columns:repeat(3,1fr);gap:.7rem;flex:none}
+.quick button{background:var(--panel);border:2px solid var(--line);border-radius:1.1rem;padding:.9rem .6rem;min-height:5.6rem;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.15rem;box-shadow:0 2px 0 var(--line)}
+.quick button b{font-size:1.35rem;line-height:1.2;word-break:keep-all}
+.quick button small{font-size:.9rem;color:var(--muted)}
+.big2{display:grid;grid-template-columns:1fr 1fr;gap:.7rem;flex:none}
+.bigbtn{border-radius:1.2rem;padding:1.1rem .8rem;min-height:6rem;font-size:1.5rem;font-weight:700;color:#fff;background:var(--route);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:.1rem;line-height:1.25}
+.bigbtn small{font-size:.95rem;font-weight:500;opacity:.9}
+.bigbtn.teacher{background:var(--start)}
+
+/* ── 건물·층에서 고르기 ── */
+.btabs{display:grid;grid-template-columns:repeat(4,1fr);gap:.5rem;flex:none}
+.btabs button{background:var(--panel);border:2px solid var(--line);border-radius:.9rem;padding:.7rem .3rem;font-size:1.15rem;font-weight:700;line-height:1.2}
+.btabs button small{display:block;font-size:.8rem;font-weight:500;color:var(--muted)}
+.btabs button[aria-selected="true"]{background:var(--route);border-color:var(--route);color:#fff}
+.btabs button[aria-selected="true"] small{color:#e6efff}
+.floors{flex:1 1 0;overflow-y:auto;touch-action:pan-y;display:flex;flex-direction:column;gap:1rem;padding-bottom:1rem}
+.floor{background:var(--panel);border-radius:1.1rem;padding:.8rem}
+.floor h3{margin:0 0 .6rem;font-size:1.3rem;display:flex;align-items:center;gap:.5rem}
+.floor h3 i{font-style:normal;background:var(--ink);color:#fff;border-radius:.5rem;padding:.05rem .55rem;font-size:1.1rem}
+.rooms{display:grid;grid-template-columns:repeat(3,1fr);gap:.5rem}
+.rooms button{background:var(--bg);border:2px solid var(--line);border-radius:.8rem;padding:.75rem .4rem;min-height:4.2rem;font-size:1.15rem;font-weight:600;line-height:1.25;word-break:keep-all}
+
+/* ── 선생님 찾기 ── */
+.thint{margin:0;font-size:1.25rem;color:var(--muted);flex:none}
+.tbox{flex:none;display:flex;align-items:center;min-height:5rem;background:var(--panel);border:3px solid var(--route);border-radius:1.1rem;padding:.4rem 1.2rem;font-size:2.2rem;font-weight:700;letter-spacing:.06em}
+.tbox .ph{color:#9aa8b5;font-weight:500;font-size:1.4rem;letter-spacing:0}
+.tbox .caret{display:inline-block;width:3px;height:2.2rem;background:var(--route);margin-left:2px;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+.tmsg{margin:0;font-size:1.2rem;min-height:1.7rem;flex:none}
+.tmsg.warn{color:var(--dest);font-weight:600}
+.tres{flex:1 1 0;overflow-y:auto;display:flex;flex-direction:column;gap:.7rem}
+.tcard{background:var(--panel);border-radius:1rem;padding:1rem;display:flex;flex-direction:column;gap:.5rem}
+.tcard b{font-size:1.4rem}
+.tcard .tinfo{color:var(--muted);font-size:1.1rem}
+.tcard .tbtns{display:flex;gap:.5rem;flex-wrap:wrap}
+.tcard .tbtns button{background:var(--route);color:#fff;border-radius:.8rem;padding:.7rem 1.1rem;font-size:1.15rem;font-weight:700}
+.tcard .tbtns button.alt{background:var(--bg);color:var(--ink);border:2px solid var(--line)}
+.kbd{flex:none;display:flex;flex-direction:column;gap:.45rem;background:#d9e1e8;border-radius:1.1rem;padding:.6rem}
+.kbrow{display:flex;gap:.45rem;justify-content:center}
+.kbrow button{flex:1 1 0;max-width:9.5%;min-height:4.4rem;background:var(--panel);border-radius:.7rem;font-size:1.7rem;font-weight:600;box-shadow:0 2px 0 #b5c1cc}
+.kbrow.r1{padding:0 4.5%}
+.kbrow button.fn{background:#c3ced8;font-size:1.3rem}
+.kbrow button.fn.on{background:var(--route);color:#fff}
+.kbrow.r3 button{max-width:none;font-size:1.3rem}
+.kbrow.r3 button.go{background:var(--start);color:#fff;flex:1.6 1 0;font-size:1.5rem;font-weight:700}
+
+/* ── 안내 한 장 ── */
+.ghead{flex:none;display:flex;flex-direction:column;gap:.1rem}
+.gname{font-family:var(--font-display);font-size:2.6rem;line-height:1.15;word-break:keep-all}
+.gsub{font-size:1.2rem;color:var(--muted);font-weight:600}
+.gsub .from{color:var(--start)}
+.tstrip{flex:none;display:flex;flex-wrap:wrap;align-items:center;gap:.4rem 1rem;background:var(--start-soft);border-radius:1rem;padding:.7rem 1rem;font-size:1.2rem}
+.tstrip b{font-size:1.3rem}
+.tstrip button{margin-left:auto;background:var(--panel);border:2px solid var(--start);color:#0f5e40;border-radius:.8rem;padding:.5rem .9rem;font-weight:700;font-size:1.1rem}
+.figs{flex:1 1 0;min-height:10rem;display:flex;flex-direction:column;justify-content:center;gap:.6rem}
+.fig{flex:1 1 0;min-height:0;position:relative;background:var(--ground);border-radius:1.1rem;overflow:hidden}
+.fig svg{position:absolute;inset:0;width:100%;height:100%;display:block}
+.fig .ftag{position:absolute;left:.7rem;top:.6rem;z-index:1;background:rgba(21,33,44,.86);color:#fff;border-radius:.6rem;padding:.2rem .7rem;font-size:1.05rem;font-weight:700}
+.gsteps{flex:0 1 auto;max-height:46%;overflow-y:auto;touch-action:pan-y;list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:.5rem}
+.gsteps li{display:flex;align-items:center;gap:.8rem;background:var(--panel);border-radius:1rem;padding:.65rem .9rem}
+.gsteps .n{flex:none;width:2.4rem;height:2.4rem;border-radius:50%;background:var(--route);color:#fff;display:grid;place-items:center;font-weight:700;font-size:1.25rem}
+.gsteps li.arrive{background:var(--dest-soft)}
+.gsteps li.arrive .n{background:var(--dest)}
+.gsteps .tx{flex:1;font-size:1.3rem;font-weight:500;line-height:1.4;word-break:keep-all}
+.gsteps .tx small{display:block;font-size:.95rem;color:var(--muted);font-weight:600}
+.gsteps figure{flex:none;margin:0;width:7.5rem;height:5.2rem;border-radius:.6rem;overflow:hidden;background:var(--bg)}
+.gsteps figure img{width:100%;height:100%;object-fit:cover;display:block}
+.note{flex:none;margin:0;font-size:.9rem;color:var(--muted);text-align:center}
+
+/* ── 덮개: 불러오는 중 / 곧 처음 화면으로 ── */
+.cover{position:fixed;inset:0;z-index:20;display:grid;place-items:center;background:rgba(238,242,245,.94);padding:2rem;text-align:center}
+.cover p{margin:.3rem 0;font-size:1.6rem;font-weight:600}
+.cover small{display:block;margin-top:.6rem;font-size:1rem;color:var(--muted);font-weight:400}
+.idle{background:rgba(15,22,32,.72)}
+.ibox{background:var(--panel);border-radius:1.5rem;padding:2.2rem 2.5rem;max-width:36rem}
+.ibox .big{font-family:var(--font-display);font-size:5rem;color:var(--route);line-height:1;margin:.4rem 0}
+</style>
+</head>
+<body>
+
+<!-- ① 처음 화면 -->
+<section class="screen" id="home">
+  <header class="hhead">
+    <div><div class="school">순천청암고등학교</div><h1>학교 길안내</h1></div>
+    <div class="hright">
+      <button type="button" class="back-btn" data-back hidden>◀ 메인 화면</button>
+      <div class="here"><span class="dot"></span>지금 계신 곳 <b>별관 현관</b></div>
+    </div>
+  </header>
+  <div class="homemap"><svg id="homeMap" preserveAspectRatio="xMidYMid meet" role="img" aria-label="학교 건물 배치도"></svg></div>
+  <h2 class="ask">어디로 가세요?</h2>
+  <div class="quick" id="quick"></div>
+  <div class="big2">
+    <button type="button" class="bigbtn" id="toBuilding">건물·층에서 고르기<small>모든 교실·실습실</small></button>
+    <button type="button" class="bigbtn teacher" id="toTeacher">선생님 찾기<small>성함으로 자리 찾기</small></button>
+  </div>
+</section>
+
+<!-- ② 건물·층에서 고르기 -->
+<section class="screen" id="building" hidden>
+  <div class="topbar"><button type="button" class="home-btn" data-home>← 처음으로</button><h2>건물·층에서 고르기</h2></div>
+  <div class="btabs" id="btabs" role="tablist"></div>
+  <div class="floors" id="floors"></div>
+</section>
+
+<!-- ③ 선생님 찾기 -->
+<section class="screen" id="teacher" hidden>
+  <div class="topbar"><button type="button" class="home-btn" data-home>← 처음으로</button><h2>선생님 찾기</h2></div>
+  <p class="thint">선생님 성함 <b>전체</b>를 아래 자판으로 눌러 주세요.</p>
+  <div class="tbox" id="tbox" aria-live="polite"></div>
+  <p class="tmsg" id="tmsg"></p>
+  <div class="tres" id="tres"></div>
+  <div class="kbd" id="kbd"></div>
+</section>
+
+<!-- ④ 안내 한 장 -->
+<section class="screen" id="guide" hidden>
+  <div class="topbar"><button type="button" class="home-btn" data-home>← 처음으로</button></div>
+  <div class="ghead"><div class="gname" id="gName"></div><div class="gsub" id="gSub"></div></div>
+  <div class="tstrip" id="tstrip" hidden></div>
+  <div class="figs" id="figs"></div>
+  <ol class="gsteps" id="gSteps"></ol>
+  <p class="note">도식 안내도예요. 실제 모습과 조금 다를 수 있어요.</p>
+</section>
+
+<div class="cover" id="loading"><div><p id="loadMsg">안내도를 불러오는 중이에요…</p><small id="loadSub"></small><button type="button" class="back-btn" data-back hidden>◀ 메인 화면으로 돌아가기</button></div></div>
+<div class="cover idle" id="idle" hidden><div class="ibox"><p>계속 보시려면 화면을 눌러 주세요</p><div class="big" id="idleN">10</div><p style="font-size:1.2rem;color:var(--muted)" id="idleTo">초 뒤 처음 화면으로 돌아가요</p></div></div>
+
+<script>
+const NS="http://www.w3.org/2000/svg";
+const $=id=>document.getElementById(id);
+
+/* ── 설정 ── */
+// ★ Apps Script 웹앱 주소(…/exec). 배포 → 배포 관리에서 복사해 붙여넣으세요.
+const API_URL='https://script.google.com/macros/s/AKfycbz0rbYObNc-dI9e6OI1cyshmMZeQbtO4hq1gaWR9WHHZMIYGfwDfJBwA9rl2UwPNMFvTQ/exec';
+// ★ 메인 키오스크 주소. 메인 키오스크 화면 안에 열렸을 때 신호를 주고받는 상대 확인용이고,
+//   길안내 주소를 따로 열었을 때는 '◀ 메인 화면' 버튼·60초 무입력 때 이 주소로 갑니다.
+const BACK_URL='https://kuro095-gif.github.io/cheongam-kiosk/';
+const RELOAD_HOUR=3;    // 매일 이 시각(새벽 3시)에 처음 화면이면 새로고침 → 고친 화면 자동 반영
+const IDLE_SEC=60;     // 이 시간(초) 동안 아무도 만지지 않으면 길안내 처음 화면으로 (따로 열렸으면 메인 키오스크로)
+const WARN_SEC=10;      // 돌아가기 전 몇 초 동안 안내를 띄울지
+const RETRY_SEC=30;     // 불러오기 실패 시 다시 시도하는 간격(초)
+const REFRESH_MIN=60;   // 처음 화면에 있을 때 시트 내용을 다시 읽는 간격(분)
+const QUICK=['제1교무실','제2교무실','제3교무실','제4교무실','교장실','행정실','보건실','상담실','도서관(꿈오름터)','학생급식실','청암체육관','청암관 세미나실'];
+const TAB_ORDER=['annex','main','lab','dream','bamboo','gym','cheongam'];
+
+/* ── 건물 구조 (고정). 방 이름과 순서는 시트 '방 목록'에서 받아옴 ── */
+const BUILDING_KEYS={'본관':'main','별관':'annex','실습동':'lab','드림홀':'dream','청죽원':'bamboo','청암체육관':'gym','청암관':'cheongam'};
+const STAIRS={main:'three',annex:'three',lab:'one',dream:'one',bamboo:'one',gym:'none',cheongam:'one'};
+const UNIV={cheongam:true}; // 청암대 건물
+
+/* ── 학교 안 길 (정문은 동쪽, 위쪽이 북쪽) ── */
+const NODES={G:[592,300],GJ:[520,300],J:[487,300],PK:[380,300],MF:[285,300],DW:[52,300],ME:[285,279],
+  E1:[487,232],BB:[503,232],E2:[487,198],AJ:[285,198],AE:[285,171],DJ:[52,198],DE:[52,190],
+  E3:[487,103],LJ:[300,103],LE:[300,86],MB:[285,230],AB:[300,122],NW:[150,103],DB:[52,120],
+  CW:[150,-4],CA:[300,-4],CE:[487,-4],LB:[300,40],GY:[520,390]};
+const EDGES=[['G','GJ'],['GJ','J'],['J','PK'],['PK','MF'],['MF','DW'],['MF','ME'],['GJ','GY'],
+  ['J','E1'],['E1','BB'],['E1','E2'],['E2','E3'],['E2','AJ'],['AJ','AE'],['AJ','MB'],['AJ','DJ'],['DW','DJ'],['DJ','DE'],
+  ['E3','LJ'],['LJ','LE'],['LJ','AB'],['LJ','NW'],['NW','DB',[[52,103]]],
+  ['NW','CW'],['CW','CA'],['CA','CE'],['CE','E3'],['CA','LB']];
+const LAND={G:'정문',GJ:'체육관 갈림길',J:'청죽원 쪽 길 입구',PK:'본관앞 주차장',MF:'본관 앞 큰 계단 아래',DW:'본관 서쪽 끝',
+  E1:'청죽원 앞',E2:'정원 옆 큰길',AJ:'별관 현관 앞',DJ:'드림홀 앞',E3:'별관 뒤 갈림길',LJ:'실습동 현관 앞',NW:'실습동 서쪽 끝',
+  CW:'청암관 앞 서쪽 길',CE:'청암관 앞 동쪽 길'};
+const ENTRY={main:['ME','MB'],annex:['AE','AB'],lab:['LE','LB'],dream:['DE','DB'],bamboo:['BB'],gym:['GY'],cheongam:['CA']};
+const ENTRY_NAME={ME:'본관 현관',MB:'본관 뒷문',AB:'별관 뒷문',AE:'별관 현관',LE:'실습동 현관',LB:'실습동 뒷문',DE:'드림홀 입구',DB:'드림홀 뒤쪽 입구',
+  BB:'청죽원 입구',GY:'청암체육관 입구',CA:'청암관 입구'};
+const SPECIAL={'MF>ME':'큰 계단을 올라 본관 현관으로 들어가요.','ME>MF':'큰 계단을 내려가요.',
+  'AJ>MB':'정원 사이 길로 곧장 내려가 본관 뒷문으로 들어가요.','MB>AJ':'정원 사이 길로 곧장 올라가요.'};
+const SPECIAL_RUN={'AB>LE':'통로를 건너 바로 맞은편 실습동 현관으로 들어가요.','LE>AB':'통로를 건너 바로 맞은편 별관 뒷문으로 들어가요.'};
+
+/* 출발지: 별관 현관 고정 (별관 안을 지나 뒷문으로 나가는 길도 함께 고려) */
+const START='annex', START_NODES=['AE','AB'], HERE=NODES.AE;
+let lastEntry=null, lastFrom=null;
+
+const ADJ={};
+const len=p=>{let L=0;for(let i=1;i<p.length;i++)L+=Math.hypot(p[i][0]-p[i-1][0],p[i][1]-p[i-1][1]);return L};
+EDGES.forEach(([a,b,via])=>{const pts=[NODES[a],...(via||[]),NODES[b]];
+  (ADJ[a]=ADJ[a]||[]).push({to:b,pts}); (ADJ[b]=ADJ[b]||[]).push({to:a,pts:pts.slice().reverse()});});
+function shortest(from,to){
+  const dist={},prev={},left=new Set(Object.keys(NODES)); for(const n in NODES) dist[n]=Infinity; dist[from]=0;
+  while(left.size){ let u=null; for(const n of left) if(u===null||dist[n]<dist[u]) u=n;
+    left.delete(u); if(u===to||dist[u]===Infinity) break;
+    for(const e of ADJ[u]||[]){ const d=dist[u]+len(e.pts); if(d<dist[e.to]){dist[e.to]=d;prev[e.to]={from:u,e}} } }
+  const path=[]; let n=to; while(n!==from){ const p=prev[n]; if(!p) return []; path.unshift({from:p.from,to:n,pts:p.e.pts}); n=p.from; }
+  return path;
+}
+function ro(w){const c=String(w).slice(-1).charCodeAt(0); if(c>=0xAC00&&c<=0xD7A3){const j=(c-0xAC00)%28; return w+(j&&j!==8?'으로':'로')} return w+'로'}
+function turnOf(a,b){ // a: 들어오는 마지막 구간, b: 나가는 첫 구간
+  const v1=[a[1][0]-a[0][0],a[1][1]-a[0][1]], v2=[b[1][0]-b[0][0],b[1][1]-b[0][1]];
+  const cr=v1[0]*v2[1]-v1[1]*v2[0], dot=v1[0]*v2[0]+v1[1]*v2[1];
+  if(Math.abs(cr)<1e-6&&dot>0) return 'S'; return cr>0?'R':'L';
+}
+function campusSteps(destB){
+  const froms=START_NODES, ends=ENTRY[destB];
+  let path=null, entry=ends[0], from=froms[0];
+  const same=froms.find(f=>ends.includes(f));
+  if(same){ path=[]; entry=same; from=same; }
+  else froms.forEach(f=>ends.forEach(t=>{ const pp=shortest(f,t); const L=pp.reduce((s,e)=>s+len(e.pts),0);
+    if(pp.length&&(!path||L<path.L)){ path=pp; path.L=L; entry=t; from=f; } }));
+  path=path||[]; lastFrom=from;
+  // 곧게 이어지는 구간은 하나로 묶기
+  let runs=[];
+  path.forEach((e,i)=>{
+    const key=e.from+'>'+e.to, last=runs[runs.length-1];
+    const prevE=path[i-1];
+    const turn=prevE?turnOf(prevE.pts.slice(-2),e.pts.slice(0,2)):null;
+    if(last&&!last.special&&!SPECIAL[key]&&turn==='S'&&!ENTRY_NAME[e.from]) { last.to=e.to; last.pts=last.pts.concat(e.pts.slice(1)); }
+    else runs.push({from:e.from,to:e.to,pts:e.pts.slice(),turn,special:SPECIAL[key]||null});
+  });
+  // 건물에서 나와 몇 걸음 뒤 바로 꺾는 짧은 구간은 다음 단계에 합침
+  let lead=null;
+  if(runs.length>1&&!runs[0].special&&len(runs[0].pts)<40){ lead=runs[0]; runs=runs.slice(1); runs[0].pts=lead.pts.concat(runs[0].pts.slice(1)); }
+  let gardenShown=false;
+  const out=runs.map((r,i)=>{
+    let pre='';
+    const tw=r.turn==='R'?'오른쪽으로 꺾어 ':r.turn==='L'?'왼쪽으로 꺾어 ':'';
+    if(i===0) pre= from==='AB'?'별관 현관에서 건물 안을 지나 반대편 뒷문으로 나와 '+(lead?tw:''):ENTRY_NAME[from]+'에서 나와 '+(lead?tw:'');
+    else pre= tw||'계속 직진해서 ';
+    let t;
+    if(r.special) t=pre+r.special;
+    else if(SPECIAL_RUN[r.from+'>'+r.to]) t=pre+SPECIAL_RUN[r.from+'>'+r.to];
+    else if(ENTRY_NAME[r.to]) t=pre+ro(ENTRY_NAME[r.to])+' 들어가요.';
+    else t=pre+LAND[r.to]+'까지 가요.';
+    if(r.pts.every(p=>p[1]===300)&&len(r.pts)>=150){
+      const west=r.pts[r.pts.length-1][0]<r.pts[0][0];
+      t+= west?' 오른쪽에 본관, 왼쪽에 축구장이 보여요.':' 왼쪽에 본관, 오른쪽에 축구장이 보여요.';
+    }
+    if(r.to==='CA'||(r.to==='CW'||r.to==='CE')) t+=' 청암관은 청암대학교 건물이에요.';
+    const photos=[];
+    if(i===0) photos.push(ENTRY_NAME[from]);
+    if(!gardenShown&&r.pts.some((q,j)=>j>0&&q[1]===198&&r.pts[j-1][1]===198)){ photos.push('청빈원(정원) 길'); gardenShown=true; }
+    if(ENTRY_NAME[r.to]) photos.push(ENTRY_NAME[r.to]);
+    return {scene:'campus',where:'학교 안 길',text:t,pts:r.pts,photos};
+  });
+  // 청암관 안내 문장은 한 번만
+  let seen=false; out.forEach(s=>{ if(s.text.includes(' 청암관은 청암대학교')){ if(seen) s.text=s.text.replace(' 청암관은 청암대학교 건물이에요.',''); seen=true; } });
+  out.entry=entry;
+  return out;
+}
+const BOX={lab:[150,40,300,44],annex:[115,122,350,46],main:[80,228,390,48],dream:[25,120,55,70],bamboo:[503,195,62,70],gym:[455,392,120,100],cheongam:[160,-80,280,64]};
+const BNAME={main:'본관',annex:'별관',lab:'실습동',dream:'드림홀',bamboo:'청죽원',gym:'청암체육관',cheongam:'청암관'};
+const INFO_SCI=[8,334,84,132]; // 청암대 정보과학관 (길안내 대상 아님)
+
+const ROW_TOP=64, ROW_BOT=168, COR_Y=197, SOUTH=270;
+let B={}, GEO={}, DEST=[], ROUTE_PHOTOS={};
+const fname=f=>f<0?'지하 '+(-f)+'층':f+'층';
+const norm=s=>String(s).replace(/[\s()·\-,]/g,'').toLowerCase();
+
+/* 시트 행 → 건물·층·방 구조 */
+function buildModel(data){
+  B={}; GEO={}; DEST=[]; ROUTE_PHOTOS=data.routePhotos||{};
+  for(const k in BNAME) B[k]={name:BNAME[k],stairs:STAIRS[k],floors:[]};
+  const tmp={};
+  (data.rooms||[]).forEach(r=>{
+    const k=BUILDING_KEYS[String(r.building).trim()]; if(!k) return;
+    const f=Number(r.floor); if(!f) return;
+    (tmp[k]=tmp[k]||{})[f]=(tmp[k][f]||[]);
+    tmp[k][f].push({order:Number(r.order)||0,lobby:String(r.kind).trim()==='현관',name:String(r.name).trim(),alias:String(r.alias||''),photo:String(r.photo||'').trim()});
+  });
+  for(const k in B){
+    const fl=tmp[k]||{};
+    B[k].floors=Object.keys(fl).map(Number).sort((a,b)=>a-b).map(f=>[f,fl[f].sort((a,b)=>a.order-b.order)]);
+    if(!B[k].floors.some(x=>x[0]===1)) B[k].floors.unshift([1,[]]);
+  }
+  for(const k in B){
+    const fl=B[k].floors, max=Math.max(1,...fl.map(f=>f[1].length));
+    const width=Math.max(max*118,420), xs={};
+    fl.forEach(([f,rooms])=>{const s=width/Math.max(rooms.length,1);xs[f]=rooms.map((_,i)=>(i+.5)*s)});
+    const first=fl.find(f=>f[0]===1)[1], li=first.findIndex(r=>r.lobby);
+    const hx= li>=0 ? xs[1][li] : width*0.3;
+    const cx= Math.min(hx+(li>=0?78:120), width-40);
+    GEO[k]={width,xs,hx,cx};
+  }
+  for(const k in B) for(const [f,rooms] of B[k].floors) rooms.forEach((r,i)=>{
+    if(r.lobby||!r.name) return;
+    DEST.push({id:DEST.length,b:k,f,i,name:r.name,alias:r.alias,photo:r.photo,
+      where:B[k].name+(UNIV[k]?'(청암대)':'')+(B[k].floors.length>1||f!==1?' '+fname(f):'')});
+  });
+}
+
+/* ── 안내 문장 만들기 ── */
+function floorRooms(k,f){return B[k].floors.find(x=>x[0]===f)[1]}
+function nthFrom(k,f,fromX,toX){
+  const rooms=floorRooms(k,f), xs=GEO[k].xs[f]; let n=0;
+  rooms.forEach((r,i)=>{ if(r.lobby)return; const x=xs[i];
+    if(toX>=fromX? (x>fromX&&x<=toX+1):(x<fromX&&x>=toX-1)) n++; });
+  return n;
+}
+function iyeyo(w){ // 받침에 따라 '이에요' / '예요'
+  const s=String(w).replace(/[^0-9A-Za-z가-힣]+$/,''); const ch=s.slice(-1), c=ch.charCodeAt(0);
+  if(c>=0xAC00&&c<=0xD7A3) return w+((c-0xAC00)%28?'이에요':'예요');
+  if(/[0-9]/.test(ch)) return w+('013678'.includes(ch)?'이에요':'예요');
+  return w+'이에요';
+}
+function ord(n){return n===1?'첫 번째':n===2?'두 번째':n===3?'세 번째':n===4?'네 번째':n+'번째'}
+function buildSteps(d,teacher){
+  const g=GEO[d.b], bn=B[d.b].name, small=B[d.b].floors.every(f=>f[1].length<=1);
+  const S=campusSteps(d.b), onSite=S.length===0, entry=S.entry; lastEntry=entry;
+  const rx=g.xs[d.f][d.i], door=[rx,ROW_BOT+2], start=(entry==='MB'||entry==='AB'||entry==='LB')?[g.hx,ROW_TOP-22]:[g.hx,SOUTH+22];
+  const k1=d.b+':1', kf=d.b+':'+d.f;
+  if(d.b==='gym'){ S.push({scene:'campus',where:'청암체육관',text:'도착했어요. 이곳이 청암체육관이에요.',pts:[[520,390]],arrive:true,room:d.photo}); return S;}
+  const n0=S.length;
+  if(d.f===1){
+    let t;
+    if(small) t='입구로 들어오면 바로 '+iyeyo(d.name)+'.';
+    else{const left=rx<g.hx, n=nthFrom(d.b,1,g.hx,rx);
+      t='현관으로 들어와 '+(left?'왼쪽':'오른쪽')+'으로 가요. '+(n===1?'바로 옆':ord(n))+' 방이 '+iyeyo(d.name)+'.';}
+    S.push({scene:k1,where:bn+' 1층',text:t,pts:[start,[g.hx,COR_Y],[rx,COR_Y],door]});
+  }else{
+    const stairName=B[d.b].stairs==='three'?bn+' 중앙 계단':bn+' 계단';
+    // 키오스크: '계단으로 가요' + '○층까지 올라가요'를 한 단계로
+    const climb='계단으로 '+fname(d.f)+'까지 '+(d.f>1?'올라':'내려')+'가요.';
+    S.push({scene:k1,where:bn+' 1층 → '+fname(d.f),text:(small?'입구로 들어와 '+climb:B[d.b].stairs==='three'?'현관으로 들어와 현관 앞 중앙 '+climb:'현관으로 들어와 현관 옆 '+climb),pts:[start,[g.hx,COR_Y],[g.cx,COR_Y],[g.cx,SOUTH-26]],photos:[stairName]});
+    let t;
+    if(small) t='계단에서 나오면 바로 '+iyeyo(d.name)+'.';
+    else{const west=rx<g.cx, n=nthFrom(d.b,d.f,g.cx,rx);
+      const dir=(d.b==='main'||d.b==='annex')?(west?'드림홀 쪽(서쪽)':'청죽원 쪽(동쪽)'):(west?'왼쪽(서쪽)':'오른쪽(동쪽)');
+      t='계단에서 나와 '+dir+' 복도로 가요. '+(n===1?'바로 앞':ord(n))+' 방이 '+iyeyo(d.name)+'.';}
+    S.push({scene:kf,where:bn+' '+fname(d.f),text:t,pts:[[g.cx,SOUTH-26],[g.cx,COR_Y],[rx,COR_Y],door]});
+  }
+  if(onSite&&S[n0]) S[n0].text=S[n0].text.replace('현관으로 들어와 현관 ','현관 ').replace('현관으로 들어와 ','현관에서 ').replace('입구로 들어와 ','입구에서 ').replace('입구로 들어오면 ','입구에서 ');
+  if(entry==='AB'&&S[n0]) S[n0].text=S[n0].text.replace('현관으로 들어와 현관 앞 중앙 계단','뒷문으로 들어와 바로 앞 중앙 계단').replace('현관으로 들어와 ','뒷문으로 들어와 ');
+  if(entry==='MB'&&S[n0]) S[n0].text=S[n0].text.replace('현관으로 들어와 현관 앞 중앙 계단','뒷문으로 들어와 바로 앞 중앙 계단').replace('현관으로 들어와 ','뒷문으로 들어와 ');
+  if(entry==='LB'&&S[n0]) S[n0].text=S[n0].text.replace('현관으로 들어와 현관 옆 계단','뒷문으로 들어와 계단').replace('현관으로 들어와 ','뒷문으로 들어와 ');
+  if(entry==='DB'&&S[n0]) S[n0].text=S[n0].text.replace('입구로 들어와 ','뒤쪽 입구로 들어와 ').replace('입구로 들어오면 ','뒤쪽 입구로 들어오면 ');
+  const rooms=floorRooms(d.b,d.f), nb=[];
+  for(const j of [d.i-1,d.i+1]) if(rooms[j]&&!rooms[j].lobby) nb.push(rooms[j].name);
+  const arriveText='도착했어요.'+(nb.length?' 옆 방은 '+iyeyo(nb.join(', '))+'.':'');
+  const seat=teacher&&!teacher.homeroomOnly&&seatInfo(teacher);
+  if(seat){
+    S.push({scene:'seat:'+teacher.place,where:d.name+' 안',text:'안으로 들어가 천장의 부서 판넬을 보세요. '+teacher.name+' 선생님 자리: '+seat.text+'.'+(teacher.ext?' 내선 '+teacher.ext:''),pts:[seat.pt],arrive:true,seat:true,room:d.photo});
+  } else if(teacher){
+    const who=teacher.name+' 선생님'+(teacher.dept&&teacher.dept!==d.name?'('+teacher.dept+')':'');
+    const extra=teacher.homeroomOnly?' '+teacher.name+' 선생님이 담임을 맡은 교실이에요.':teacher.note&&/별실/.test(teacher.note)?' '+teacher.note.replace(/\(별실\)/,'')+'은 별도의 방이에요. 행정실에서 안내받으세요.':' '+who+'이 계신 곳이에요.';
+    S.push({scene:kf,where:bn+' '+fname(d.f),text:'도착했어요.'+extra+(teacher.ext?' 내선 '+teacher.ext:''),pts:[door],arrive:true,room:d.photo});
+  } else S.push({scene:kf,where:bn+' '+fname(d.f),text:arriveText,pts:[door],arrive:true,room:d.photo});
+  return S;
+}
+
+/* ── 교무실 자리 배치 (2026-10-21 교무실 배치도 기준, 그림 왼쪽이 동편) ── */
+const SEATMAP={
+  '제1교무실':[{panels:['교무기획부'],head:'C',L:3,R:3},{panels:['학생복지부','교육연구부'],head:'R',L:3,R:3},{panels:['학생생활안전부'],head:'C',L:3,R:3}],
+  '제2교무실':[{panels:['교육활동홍보부','디자인·라케부'],L:3,R:3},{panels:['디자인·라케부','보건간호부'],L:3,R:3},{panels:['학과지원부','특성화교육부'],L:3,R:3},{panels:['특성화교육부'],C:2}],
+  '제3교무실':[{panels:['2학년부'],C:2},{panels:['1학년부','사업기획부'],L:3,R:3},{panels:['사업기획부'],C:3}],
+  '제4교무실':[{panels:['3학년부'],L:2,R:2},{panels:['취업부'],L:2,R:3}],
+  '행정실':[{panels:['행정실'],L:3,R:3}]
+};
+const CW=116, CH=40, GAP=64, PANEL_H=28;
+function seatLayout(office){
+  const isl=SEATMAP[office]; if(!isl) return null;
+  const cells=[], panels=[]; let x=0;
+  isl.forEach((I,ii)=>{
+    const cols=I.C?['한 줄']:['왼쪽','오른쪽'], w=cols.length*CW;
+    if(I.panels.length===1) panels.push({x,w,label:I.panels[0]});
+    else I.panels.forEach((lb,j)=>panels.push({x:x+j*CW,w:CW,label:lb}));
+    const top=PANEL_H+10+(I.head?CH+10:0);
+    if(I.head) cells.push({isl:ii+1,col:'맨 앞',n:0,x:I.head==='C'?x+(w-CW)/2:x+CW,y:PANEL_H+10});
+    cols.forEach((c,j)=>{const cnt=I.C||(c==='왼쪽'?I.L:I.R);
+      for(let n=1;n<=cnt;n++) cells.push({isl:ii+1,col:c,n,x:x+j*CW,y:top+(n-1)*CH});});
+    x+=w+GAP;
+  });
+  const width=x-GAP, height=Math.max(...cells.map(c=>c.y+CH));
+  return {cells,panels,width,height};
+}
+function seatInfo(tc){
+  const L=seatLayout(tc.place); if(!L) return null;
+  const isl=Number(tc.island), col=String(tc.col||'').trim(), n=Number(tc.order)||0;
+  const cell=L.cells.find(c=>c.isl===isl&&c.col===col&&(col==='맨 앞'||c.n===n)); if(!cell) return null;
+  const I=SEATMAP[tc.place][isl-1];
+  let text;
+  if(col==='맨 앞') text=(I.head==='R'?I.panels[I.panels.length-1]:I.panels[0])+' 판넬 바로 아래, 맨 앞 '+(I.head==='C'?'가운데 ':'')+'자리';
+  else if(col==='한 줄') text=I.panels[0]+' 판넬 아래 한 줄 책상, 앞에서 '+ord(n)+' 자리';
+  else if(I.panels.length>1) text=(col==='왼쪽'?I.panels[0]:I.panels[1])+' 판넬 쪽 책상 묶음의 '+col+' 줄, 앞에서 '+ord(n)+' 자리';
+  else text=I.panels[0]+' 판넬 아래 책상 묶음의 '+col+' 줄, 앞에서 '+ord(n)+' 자리';
+  return {text,cell,pt:[cell.x+CW/2,cell.y+6]};
+}
+/* 단계에 붙일 사진 (첫 장만 씀) */
+function stepPhoto(s,d){
+  for(const p of (s.photos||[])){ const f=ROUTE_PHOTOS[p]; if(f) return {file:f,caption:p}; }
+  if(s.arrive&&s.room) return {file:s.room,caption:d.name};
+  return null;
+}
+
+/* ── SVG 그리기 ── */
+const el=(t,a={},p)=>{const e=document.createElementNS(NS,t);for(const k in a)e.setAttribute(k,a[k]);if(p)p.appendChild(e);return e};
+function txt(p,x,y,s,a={}){const t=el('text',Object.assign({x,y,'text-anchor':'middle','font-family':'IBM Plex Sans KR, Malgun Gothic, sans-serif','font-size':13,fill:'var(--bldg-ink)'},a),p);t.textContent=s;return t}
+function label2(p,x,yc,s,size,a){
+  let L=[s]; const m=s.match(/^(.*?\d{3})\s(.+)$/);
+  if(m) L=[m[1],m[2]]; else if(s.length>7&&s.includes(' ')){const i=s.indexOf(' ',Math.floor(s.length/2)-2);L=i>0?[s.slice(0,i),s.slice(i+1)]:[s]}
+  else if(s.length>8&&s.includes('(')){const i=s.indexOf('(');L=[s.slice(0,i),s.slice(i)]}
+  else if(s.length>9&&s.includes('·')){L=s.split('·').map((x,i,a)=>i<a.length-1?x+'·':x)}
+  L.forEach((l,i)=>txt(p,x,yc+(i-(L.length-1)/2)*(size+3)+size*.35,l,Object.assign({'font-size':size},a||{})));
+}
+function campusBase(P,d){
+  el('rect',{x:-300,y:-400,width:1200,height:1100,fill:'var(--ground)'},P);
+  const road=(dd)=>el('path',{d:dd,fill:'none',stroke:'var(--road)','stroke-width':14,'stroke-linecap':'round','stroke-linejoin':'round'},P);
+  road('M600 300 H40'); road('M487 300 V100'); road('M150 102 H487'); road('M520 300 V392'); road('M52 300 V190'); road('M285 300 V280'); road('M150 103 V-4 H487 V103'); road('M300 -4 V40'); road('M300 122 V84'); road('M150 103 H52 V120');
+  el('rect',{x:110,y:318,width:300,height:150,rx:6,fill:'var(--field)'},P);
+  el('rect',{x:120,y:328,width:280,height:130,fill:'none',stroke:'#fff','stroke-opacity':.6,'stroke-width':2},P);
+  el('line',{x1:260,y1:328,x2:260,y2:458,stroke:'#fff','stroke-opacity':.6,'stroke-width':2},P);
+  txt(P,260,398,'축구장',{fill:'var(--bldg-ink)','font-size':14,opacity:.7});
+  el('rect',{x:150,y:178,width:118,height:40,rx:8,fill:'var(--garden)'},P);
+  el('rect',{x:302,y:178,width:150,height:40,rx:8,fill:'var(--garden)'},P);
+  el('path',{d:'M487 198 H52 M285 198 V172 M285 198 V230',fill:'none',stroke:'var(--road)','stroke-width':10,'stroke-linecap':'round','stroke-linejoin':'round'},P);
+  txt(P,209,193,'청빈원',{'font-size':12,opacity:.8});txt(P,377,193,'청빈원(정원)',{'font-size':12,opacity:.8});
+  for(const k in BOX){const [x,y,w,h]=BOX[k], on=d&&d.b===k, uv=UNIV[k];
+    el('rect',{x,y,width:w,height:h,rx:4,fill:on?'var(--dest-soft)':uv?'var(--room)':'var(--bldg)',stroke:on?'var(--dest)':uv?'var(--muted)':'none','stroke-width':on?3:uv?1.5:0,'stroke-dasharray':uv&&!on?'6 4':'none'},P);
+    const nm=B[k].name, narrow=w<80;
+    const sub=UNIV[k]?'청암대 건물':'';
+    const ink=on?'var(--dest)':'var(--bldg-ink)';
+    if(narrow){ txt(P,x+w/2,y+h/2-2,nm.slice(0,2),{'font-size':14,'font-weight':700,fill:ink}); if(nm.length>2) txt(P,x+w/2,y+h/2+15,nm.slice(2),{'font-size':14,'font-weight':700,fill:ink}); }
+    else{ txt(P,x+w/2,y+h/2+(sub?0:5),nm,{'font-size':16,'font-weight':700,fill:ink}); if(sub) txt(P,x+w/2,y+h/2+17,sub,{'font-size':11,fill:'var(--muted)'}); }
+  }
+  const pk=el('g',{transform:'translate(380 300)'},P);
+  el('rect',{x:-9,y:-9,width:18,height:18,rx:4,fill:'var(--route)'},pk);
+  txt(pk,0,5,'P',{'font-size':13,'font-weight':700,fill:'#fff'});
+  const gg=el('g',{transform:'translate(576 300)'},P);
+  el('rect',{x:-6,y:-24,width:12,height:48,rx:3,fill:'var(--muted)'},gg);
+  txt(P,560,275,'정문',{'font-size':14,'font-weight':600,fill:'var(--muted)'});
+  const [ix,iy,iw,ih]=INFO_SCI;
+  el('rect',{x:ix,y:iy,width:iw,height:ih,rx:4,fill:'var(--room)',stroke:'var(--muted)','stroke-width':1.5,'stroke-dasharray':'6 4'},P);
+  [['청암대',13,600,'var(--bldg-ink)'],['정보과학관',13,600,'var(--bldg-ink)']].forEach(([s,fs,fw,c],i)=>txt(P,ix+iw/2,iy+ih/2-6+i*17,s,{'font-size':fs,'font-weight':fw,fill:c}));
+  const n=el('g',{transform:'translate(575 -70)'},P);
+  el('path',{d:'M0 -14 L6 4 L0 0 L-6 4 Z',fill:'var(--muted)'},n); txt(n,0,18,'N',{'font-size':11,fill:'var(--muted)'});
+}
+/* '지금 여기' 표시 (초록 점 + 이름표) */
+function hereMark(P,pt,label,size){
+  const s=size||1, g=el('g',{transform:`translate(${pt[0]} ${pt[1]}) scale(${s})`},P);
+  const ring=el('circle',{r:14,fill:'var(--start)',opacity:.25},g);
+  el('animate',{attributeName:'r',values:'11;22;11',dur:'1.8s',repeatCount:'indefinite'},ring);
+  el('circle',{r:9,fill:'var(--start)',stroke:'#fff','stroke-width':3},g);
+  const w=label.length*13+18;
+  el('rect',{x:-w/2,y:-46,width:w,height:24,rx:12,fill:'var(--start)'},g);
+  el('path',{d:'M-6 -23 L0 -15 L6 -23 Z',fill:'var(--start)'},g);
+  txt(g,0,-29,label,{'font-size':13,'font-weight':700,fill:'#fff'});
+}
+function destPin(P,pt,s){
+  const pin=el('g',{transform:`translate(${pt[0]} ${pt[1]}) scale(${s||1})`},P);
+  el('path',{d:'M0 0 C-10 -14 -13 -20 -13 -26 A13 13 0 1 1 13 -26 C13 -20 10 -14 0 0 Z',fill:'var(--dest)',stroke:'#fff','stroke-width':2.5},pin);
+  el('circle',{cx:0,cy:-26,r:5,fill:'#fff'},pin);
+}
+function routeLine(P,pts){
+  const p=pts.map(q=>q.join(',')).join(' ');
+  el('polyline',{points:p,fill:'none',stroke:'#fff','stroke-width':12,'stroke-linecap':'round','stroke-linejoin':'round'},P);
+  el('polyline',{points:p,fill:'none',stroke:'var(--route)','stroke-width':7,'stroke-linecap':'round','stroke-linejoin':'round'},P);
+  // 방향 화살표 (길을 따라 일정 간격)
+  const L=len(pts); const gap=70;
+  for(let d=gap*.6; d<L-20; d+=gap){ const a=along(pts,d/L);
+    const g=el('g',{transform:`translate(${a.pt[0]} ${a.pt[1]}) rotate(${a.ang*180/Math.PI})`},P);
+    el('path',{d:'M-4 -5 L3 0 L-4 5',fill:'none',stroke:'#fff','stroke-width':2.4,'stroke-linecap':'round','stroke-linejoin':'round'},g); }
+}
+function along(p,u){ const L=len(p)*u; let acc=0;
+  for(let i=1;i<p.length;i++){const a=p[i-1],b=p[i],l=Math.hypot(b[0]-a[0],b[1]-a[1]);
+    if(acc+l>=L){const r=l?(L-acc)/l:0;return {pt:[a[0]+(b[0]-a[0])*r,a[1]+(b[1]-a[1])*r],ang:Math.atan2(b[1]-a[1],b[0]-a[0])}} acc+=l;}
+  const a=p[p.length-2]||p[0],b=p[p.length-1]; return {pt:b,ang:Math.atan2(b[1]-a[1],b[0]-a[0])};
+}
+/* 단계 번호 동그라미 (안내 문장 번호와 같음) */
+function numMark(P,pt,n,s){
+  const g=el('g',{transform:`translate(${pt[0]} ${pt[1]}) scale(${s||1})`},P);
+  el('circle',{r:13,fill:'var(--ink)',stroke:'#fff','stroke-width':2.5},g);
+  txt(g,0,5,String(n),{'font-size':14,'font-weight':700,fill:'#fff'});
+}
+function drawFloor(P,k,f,d){
+  const g=GEO[k], rooms=floorRooms(k,f), s=g.width/Math.max(rooms.length,1), W=g.width;
+  el('rect',{x:-2000,y:-2000,width:W+4000,height:4000,fill:'var(--ground)'},P);
+  el('rect',{x:0,y:ROW_TOP-6,width:W,height:SOUTH-ROW_TOP+6,rx:6,fill:'var(--bldg)'},P);
+  el('rect',{x:4,y:ROW_BOT+4,width:W-8,height:52,fill:'var(--corridor)'},P);
+  const west=(k==='main'||k==='annex')?'← 서쪽 (드림홀 쪽)':'← 서쪽', east=(k==='main'||k==='annex')?'(청죽원 쪽) 동쪽 →':'동쪽 →';
+  txt(P,8,ROW_TOP-18,west,{'font-size':13,fill:'var(--muted)','text-anchor':'start'});
+  txt(P,W-8,ROW_TOP-18,east,{'font-size':13,fill:'var(--muted)','text-anchor':'end'});
+  rooms.forEach((r,i)=>{
+    const x=i*s;
+    if(r.lobby){
+      el('rect',{x:x+2,y:ROW_TOP,width:s-4,height:SOUTH-ROW_TOP-2,fill:'var(--lobby)'},P);
+      txt(P,x+s/2,ROW_TOP+56,'현관',{'font-size':15,'font-weight':600});
+      return;
+    }
+    const on=d&&d.b===k&&d.f===f&&d.i===i;
+    el('rect',{x:x+2,y:ROW_TOP,width:s-4,height:ROW_BOT-ROW_TOP,rx:3,fill:on?'var(--dest-soft)':'var(--room)',stroke:on?'var(--dest)':'none','stroke-width':on?4:0},P);
+    label2(P,x+s/2,(ROW_TOP+ROW_BOT)/2,r.name,on?18:16,on?{'font-weight':700,fill:'var(--dest)'}:null);
+  });
+  const stair=(x,lbl)=>{el('rect',{x:x-26,y:SOUTH-44,width:52,height:36,rx:3,fill:'url(#stairPat)'},P);txt(P,x,SOUTH-50,lbl,{'font-size':12,fill:'var(--muted)'});};
+  if(B[k].stairs!=='none') stair(g.cx,B[k].stairs==='three'?'중앙 계단':'계단');
+  if(B[k].stairs==='three'){ stair(40,'서쪽 계단'); stair(W-40,'동쪽 계단'); }
+  if(f===1){ el('path',{d:`M${g.hx-10} ${SOUTH+14} L${g.hx} ${SOUTH+2} L${g.hx+10} ${SOUTH+14}`,fill:'none',stroke:'var(--muted)','stroke-width':2.5},P);
+    txt(P,g.hx,SOUTH+34,'입구',{'font-size':13,fill:'var(--muted)'}); }
+}
+function drawSeats(P,office,tc){
+  const L=seatLayout(office); if(!L) return null;
+  const info=tc&&seatInfo(tc);
+  el('rect',{x:-2000,y:-2000,width:L.width+4000,height:L.height+4000,fill:'var(--ground)'},P);
+  el('rect',{x:-24,y:-52,width:L.width+48,height:L.height+76,rx:10,fill:'var(--panel)',stroke:'var(--line)','stroke-width':2},P);
+  txt(P,-8,-22,'← 동편',{'font-size':13,fill:'var(--muted)','text-anchor':'start'});
+  txt(P,L.width+8,-22,'서편 →',{'font-size':13,fill:'var(--muted)','text-anchor':'end'});
+  L.panels.forEach(pn=>{ el('rect',{x:pn.x+2,y:0,width:pn.w-4,height:PANEL_H,rx:4,fill:'var(--garden)'},P);
+    txt(P,pn.x+pn.w/2,PANEL_H/2+5,pn.label,{'font-size':pn.w>CW?14:12.5,'font-weight':600}); });
+  L.cells.forEach(c=>{ const on=info&&info.cell.isl===c.isl&&info.cell.col===c.col&&info.cell.n===c.n;
+    el('rect',{x:c.x+2,y:c.y+2,width:CW-4,height:CH-4,rx:3,fill:on?'var(--dest-soft)':'var(--room)',stroke:on?'var(--dest)':'var(--line)','stroke-width':on?3:1.2},P);
+    if(on){ txt(P,c.x+CW/2,c.y+CH/2+5,'이 자리',{'font-size':15,'font-weight':700,fill:'var(--dest)'});
+      const ring=el('rect',{x:c.x-3,y:c.y-3,width:CW+6,height:CH+6,rx:6,fill:'none',stroke:'var(--dest)','stroke-width':3},P);
+      el('animate',{attributeName:'opacity',values:'1;.15;1',dur:'1.2s',repeatCount:'indefinite'},ring); }
+  });
+  return L;
+}
+/* 보여줄 영역(box)을 그림 칸의 가로세로 비율에 맞춰 viewBox로 */
+function fitView(S,box,minW,minH,shrink){
+  let [x0,y0,x1,y1]=box, w=x1-x0, h=y1-y0;
+  if(w<minW){x0-=(minW-w)/2;w=minW}
+  if(h<(minH||0)){y0-=(minH-h)/2;h=minH}
+  if(shrink){ // 가로로 긴 도면: 칸 높이를 그림에 맞춰 줄이고 남는 자리는 다른 그림에 줌
+    const fig=S.parentNode, fr=fig.getBoundingClientRect(), need=fr.width*h/w;
+    if(need<fr.height){ fig.style.flex='0 0 auto'; fig.style.height=Math.round(need)+'px'; } }
+  const r=S.getBoundingClientRect(), A=(r.width||4)/(r.height||3);
+  if(w/h<A){const nw=h*A;x0-=(nw-w)/2;w=nw}else{const nh=w/A;y0-=(nh-h)/2;h=nh}
+  S.setAttribute('viewBox',[x0,y0,w,h].map(v=>v.toFixed(1)).join(' '));
+  return w/(r.width||1); // 화면 1px이 몇 단위인지 (표시 크기 맞춤용)
+}
+const bbox=pts=>{let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;pts.forEach(([x,y])=>{x0=Math.min(x0,x);y0=Math.min(y0,y);x1=Math.max(x1,x);y1=Math.max(y1,y)});return [x0,y0,x1,y1]};
+const pad=(b,p,q)=>[b[0]-p,b[1]-(q==null?p:q),b[2]+p,b[3]+(q==null?p:q)];
+function newSvg(parent){ const S=el('svg',{preserveAspectRatio:'xMidYMid meet'},parent);
+  const defs=el('defs',{},S); const pt=el('pattern',{id:'stairPat',width:8,height:8,patternUnits:'userSpaceOnUse'},defs);
+  el('rect',{width:8,height:8,fill:'var(--stair)'},pt); el('rect',{width:8,height:3,fill:'var(--bldg)'},pt); return S; }
+
+/* ── 화면 전환 ── */
+let screen='home', curTeacher=null;
+function show(id){
+  screen=id;
+  document.querySelectorAll('.screen').forEach(s=>s.hidden=s.id!==id);
+}
+function goHome(){
+  $('idle').hidden=true;
+  tqVal=''; renderTbox(); $('tmsg').textContent=''; $('tmsg').className='tmsg'; $('tres').innerHTML='';
+  curTeacher=null; $('figs').innerHTML=''; $('gSteps').innerHTML='';
+  show('home'); drawHome();
+  if(Date.now()-loadedAt>REFRESH_MIN*60e3) loadData(true);
+}
+document.querySelectorAll('[data-home]').forEach(b=>b.addEventListener('click',goHome));
+
+/* ── 메인 키오스크(cheongam-kiosk) 화면 안(iframe)에 열렸을 때 ──
+   메인 키오스크가 아래쪽 '⌂ 메인 메뉴로' 버튼과 대기 화면을 맡으므로, 여기서는
+   ① '메인 화면' 버튼을 숨기고 ② 60초 무입력이면 길안내 처음 화면으로만 돌아가고
+   ③ 메인 키오스크에 "사용 중"을 알려 사용 도중 대기 화면으로 넘어가지 않게 합니다.
+   (메인 키오스크의 CHEONGAM_INIT / READY / ACK / ACTIVITY / EXIT 약속) */
+const EMBED=(()=>{ try{ return window.self!==window.top; }catch(e){ return true; } })();
+const PARENT_ORIGIN=(()=>{ try{ return new URL(BACK_URL).origin; }catch(e){ return ''; } })();
+let kioskNonce=new URLSearchParams(location.search).get('kioskToken')||'', kioskOk=false, lastReport=0;
+function toParent(type,extra){
+  if(!EMBED||!kioskNonce||!PARENT_ORIGIN) return;
+  try{ window.parent.postMessage(Object.assign({type,version:1,nonce:kioskNonce},extra||{}),PARENT_ORIGIN); }catch(e){}
+}
+window.addEventListener('message',e=>{
+  if(!EMBED||e.source!==window.parent||e.origin!==PARENT_ORIGIN) return;
+  const d=e.data; if(!d||typeof d!=='object'||d.version!==1||typeof d.nonce!=='string') return;
+  if(d.type==='CHEONGAM_INIT'){ kioskNonce=d.nonce; toParent('CHEONGAM_READY',{reportsActivity:true}); return; }
+  if(d.nonce!==kioskNonce) return;
+  if(d.type==='CHEONGAM_ACK') kioskOk=true;
+  else if(d.type==='CHEONGAM_EXIT'){ if(started) goHome(); toParent('CHEONGAM_EXIT_ACK'); }
+});
+function reportActivity(){
+  if(!kioskOk||Date.now()-lastReport<5000) return;
+  lastReport=Date.now(); toParent('CHEONGAM_ACTIVITY');
+}
+toParent('CHEONGAM_READY',{reportsActivity:true});
+
+/* ── 메인 키오스크 웹앱으로 돌아가기 (따로 열렸을 때만) ── */
+const CAN_BACK=!EMBED&&(/^https?:\/\//.test(BACK_URL)||history.length>1);
+let leaving=false;
+function goBack(){
+  if(leaving) return; leaving=true;
+  $('idle').hidden=true;
+  if(/^https?:\/\//.test(BACK_URL)) location.replace(BACK_URL); else history.back();
+  setTimeout(()=>{ leaving=false; },3000); // 혹시 이동이 안 되면 다시 누를 수 있게
+}
+document.querySelectorAll('[data-back]').forEach(b=>{ b.hidden=!CAN_BACK; b.addEventListener('click',goBack); });
+$('idleTo').textContent=CAN_BACK?'초 뒤 메인 화면으로 돌아가요':'초 뒤 처음 화면으로 돌아가요';
+
+/* ── ① 처음 화면 ── */
+function drawHome(){
+  const S=$('homeMap'); S.innerHTML='';
+  const defs=el('defs',{},S);
+  campusBase(S,null);
+  el('rect',{x:BOX.annex[0],y:BOX.annex[1],width:BOX.annex[2],height:BOX.annex[3],rx:4,fill:'none',stroke:'var(--start)','stroke-width':3},S);
+  const k=fitView(S,[-20,-90,620,495],0);
+  hereMark(S,HERE,'지금 여기',Math.max(1,k*1.2));
+}
+function setupHome(){
+  const Q=$('quick'); Q.innerHTML='';
+  QUICK.forEach(n=>{const d=DEST.find(x=>x.name===n); if(!d) return;
+    const b=document.createElement('button'); b.type='button';
+    const t=document.createElement('b'); t.textContent=n.replace('(꿈오름터)','');
+    const s=document.createElement('small'); s.textContent=d.where;
+    b.append(t,s); b.addEventListener('click',()=>showGuide(d)); Q.appendChild(b);});
+}
+$('toBuilding').addEventListener('click',()=>{ show('building'); pickTab('annex'); });
+$('toTeacher').addEventListener('click',()=>{ show('teacher'); });
+
+/* ── ② 건물·층에서 고르기 ── */
+function setupTabs(){
+  const T=$('btabs'); T.innerHTML='';
+  TAB_ORDER.forEach(k=>{ if(!DEST.some(d=>d.b===k)) return;
+    const b=document.createElement('button'); b.type='button'; b.setAttribute('role','tab'); b.dataset.k=k;
+    b.textContent=B[k].name;
+    const s=document.createElement('small'); s.textContent=k==='annex'?'지금 여기':UNIV[k]?'청암대':(B[k].floors.length>1?(B[k].floors.length+'개 층'):'');
+    if(s.textContent) b.appendChild(s);
+    b.addEventListener('click',()=>pickTab(k)); T.appendChild(b); });
+}
+function pickTab(k){
+  [...$('btabs').children].forEach(b=>b.setAttribute('aria-selected',b.dataset.k===k));
+  const F=$('floors'); F.innerHTML=''; F.scrollTop=0;
+  [...B[k].floors].sort((a,b)=>b[0]-a[0]).forEach(([f])=>{
+    const list=DEST.filter(d=>d.b===k&&d.f===f); if(!list.length) return;
+    const box=document.createElement('div'); box.className='floor';
+    const h=document.createElement('h3'); const i=document.createElement('i'); i.textContent=fname(f);
+    h.append(i,document.createTextNode(B[k].name+(UNIV[k]?'(청암대)':''))); box.appendChild(h);
+    const g=document.createElement('div'); g.className='rooms';
+    list.forEach(d=>{const b=document.createElement('button'); b.type='button'; b.textContent=d.name; b.addEventListener('click',()=>showGuide(d)); g.appendChild(b);});
+    box.appendChild(g); F.appendChild(box);
+  });
+}
+
+/* ── ④ 안내 한 장 ── */
+const homeOf=tc=>({name:tc.name,ext:tc.ext,homeroom:tc.homeroom,homeroomOnly:true,full:tc});
+function destByName(n){ n=String(n||'').trim(); return DEST.find(d=>d.name===n)||DEST.find(d=>norm(d.name)===norm(n)); }
+function showGuide(d,teacher){
+  curTeacher=teacher||null;
+  const steps=buildSteps(d,curTeacher);
+  show('guide');
+  $('gName').textContent=curTeacher?curTeacher.name+' 선생님':d.name;
+  $('gSub').innerHTML='';
+  const f=document.createElement('span'); f.className='from'; f.textContent='별관 현관(지금 여기)';
+  $('gSub').append(f,document.createTextNode(' → '+(curTeacher?d.name+' · ':'')+d.where));
+  // 선생님 정보 줄
+  const ts=$('tstrip'); ts.innerHTML=''; ts.hidden=!curTeacher;
+  if(curTeacher){ const tc=curTeacher.full||curTeacher;
+    const b=document.createElement('b'); b.textContent=tc.name+' 선생님';
+    const s=document.createElement('span'); s.textContent=[tc.dept,tc.ext?'내선 '+tc.ext:'',tc.homeroom?tc.homeroom+' 담임':''].filter(Boolean).join(' · ');
+    ts.append(b,s);
+    const room=tc.place?destByName(tc.place):null, home=tc.homeroom?destByName(tc.homeroom):null;
+    if(!curTeacher.homeroomOnly&&home){ const x=document.createElement('button'); x.type='button'; x.textContent='담임 학급 '+ro(tc.homeroom)+' 안내'; x.addEventListener('click',()=>showGuide(home,homeOf(tc))); ts.appendChild(x); }
+    if(curTeacher.homeroomOnly&&room){ const x=document.createElement('button'); x.type='button'; x.textContent=ro(tc.place)+' 안내'; x.addEventListener('click',()=>showGuide(room,tc)); ts.appendChild(x); }
+  }
+  // 안내 문장 (번호 = 그림의 번호)
+  const ol=$('gSteps'); ol.innerHTML=''; const files=[];
+  steps.forEach((s,i)=>{
+    const li=document.createElement('li'); if(s.arrive) li.classList.add('arrive');
+    const n=document.createElement('span'); n.className='n'; n.textContent=s.arrive?'✓':i+1;
+    const tx=document.createElement('div'); tx.className='tx';
+    const w=document.createElement('small'); w.textContent=s.where; tx.append(w,document.createTextNode(s.text));
+    li.append(n,tx);
+    const ph=stepPhoto(s,d);
+    if(ph){ const fig=document.createElement('figure'); fig.hidden=true; const im=document.createElement('img'); im.alt=ph.caption+' 사진'; im.dataset.file=ph.file; fig.appendChild(im); li.appendChild(fig); files.push(ph.file); }
+    ol.appendChild(li);
+  });
+  // 그림: 학교 안 길 / 도착 층 / 교무실 자리
+  const figs=$('figs'); figs.innerHTML='';
+  const kf=d.b+':'+d.f, num=steps.map((s,i)=>({s,n:i+1}));
+  const campus=num.filter(o=>o.s.scene==='campus'), floor=num.filter(o=>o.s.scene===kf), seat=num.filter(o=>o.s.scene.startsWith('seat:'));
+  const jobs=[];
+  const addFig=(tag,draw,first)=>{ const box=document.createElement('div'); box.className='fig';
+    const t=document.createElement('div'); t.className='ftag'; t.textContent=tag; box.appendChild(t);
+    const S=newSvg(box); figs.appendChild(box); jobs[first?'unshift':'push'](()=>draw(S)); };
+  // 도면·자리 그림을 먼저 그려 높이를 정한 뒤, 남는 높이로 학교 안 길을 그림
+  if(campus.length) addFig('학교 안 길',S=>drawCampusFig(S,d,campus));
+  // 별관 안 목적지(밖으로 안 나감): 학교 안 길 대신 1층(현관 → 계단) 도면을 보여 줌
+  const k1=d.b+':1', first=num.filter(o=>o.s.scene===k1);
+  if(!campus.length&&d.f!==1&&first.length) addFig(B[d.b].name+' 1층',S=>drawFloorFig(S,{b:d.b,f:1,i:-1},first),true);
+  if(floor.length) addFig(B[d.b].name+' '+fname(d.f),S=>drawFloorFig(S,d,floor),true);
+  if(seat.length) addFig(curTeacher.place+' 안 자리',S=>drawSeatFig(S,curTeacher.place,curTeacher),true);
+  requestAnimationFrame(()=>jobs.forEach(j=>j()));
+  loadPhotos([...new Set(files)]);
+}
+function drawCampusFig(S,d,list){
+  const g=el('g',{},S); campusBase(g,d);
+  const pts=[]; list.forEach(o=>{ if(o.s.pts.length>1) o.s.pts.forEach(p=>pts.push(p)); });
+  const arr=list.find(o=>o.s.arrive), end=arr?arr.s.pts[0]:NODES[lastEntry];
+  const [bx,by,bw,bh]=BOX[d.b];
+  const box=pad(bbox(pts.concat([HERE,end,[bx,by],[bx+bw,by+bh]])),40,60);
+  const k=Math.max(1,fitView(S,box,300,220)*1.1);
+  if(pts.length>1) routeLine(g,pts);
+  destPin(g,end,k);
+  hereMark(g,NODES[lastFrom]||HERE,'지금 여기',k);
+  list.forEach(o=>{ if(!o.s.arrive&&o.s.pts.length>1) numMark(g,along(o.s.pts,.5).pt,o.n,k); });
+}
+function drawFloorFig(S,d,list){
+  const g=el('g',{},S); drawFloor(g,d.b,d.f,d);
+  const pts=[]; list.forEach(o=>{ if(o.s.pts.length>1) o.s.pts.forEach(p=>pts.push(p)); });
+  const all=[]; list.forEach(o=>o.s.pts.forEach(p=>all.push(p)));
+  const G=GEO[d.b], s=G.width/Math.max(floorRooms(d.b,d.f).length,1), toRoom=d.i>=0;
+  const rx=toRoom?G.xs[d.f][d.i]:all[all.length-1][0];
+  const box=pad(bbox(all.concat([[rx-s/2,ROW_TOP],[rx+s/2,ROW_TOP]])),70,0);
+  box[1]=ROW_TOP-36; box[3]=Math.max(box[3],SOUTH+40);
+  const k=Math.max(1,fitView(S,[Math.max(box[0],-20),box[1],Math.min(box[2],G.width+20),box[3]],toRoom?420:Math.min(760,G.width+40),0,true)*1.1);
+  if(pts.length>1) routeLine(g,pts);
+  list.forEach(o=>{ if(o.s.arrive) return;
+    if(o.s.pts.length>1) numMark(g,along(o.s.pts,.5).pt,o.n,k);
+    else numMark(g,[o.s.pts[0][0]+34*k,o.s.pts[0][1]],o.n,k); });
+  const last=list[list.length-1].s, endPt=last.pts[last.pts.length-1];
+  if(toRoom) destPin(g,endPt,k);
+  else{ // 1층 도면: 계단에서 끝남 → '○층으로' 표시
+    const up=el('g',{transform:`translate(${endPt[0]} ${endPt[1]-30*k}) scale(${k})`},g);
+    el('rect',{x:-34,y:-14,width:68,height:26,rx:13,fill:'var(--route)'},up);
+    txt(up,0,5,'계단 ↑',{'font-size':13,'font-weight':700,fill:'#fff'}); }
+}
+function drawSeatFig(S,office,tc){
+  const g=el('g',{},S); const L=drawSeats(g,office,tc); if(!L) return;
+  const info=tc&&seatInfo(tc);
+  // 찾는 자리 주변(양옆 한 묶음 정도)만 크게 보여 줌
+  const x0=info?Math.max(-40,info.cell.x-CW*2-GAP/2):-40, x1=info?Math.min(L.width+40,info.cell.x+CW*3+GAP/2):L.width+40;
+  fitView(S,[x0,-62,x1,L.height+40],0,0,true);
+}
+
+/* ── 사진: 서버에서 받아 한 번만 저장 ── */
+const PHOTO_CACHE={};
+function fillPhotos(){
+  document.querySelectorAll('img[data-file]').forEach(im=>{
+    const v=PHOTO_CACHE[im.dataset.file], fig=im.closest('figure');
+    if(v&&v!=='none'&&v!=='loading'){im.src=v; if(fig) fig.hidden=false}
+  });
+}
+function loadPhotos(files){
+  const need=files.filter(f=>!PHOTO_CACHE[f]); fillPhotos();
+  for(let i=0;i<need.length;i+=5){ // 서버는 한 번에 5장까지
+    const part=need.slice(i,i+5); part.forEach(f=>PHOTO_CACHE[f]='loading');
+    api('api=photos&names='+encodeURIComponent(part.join('|')),
+      map=>{part.forEach(f=>PHOTO_CACHE[f]=(map&&map[f])||'none');fillPhotos()},
+      ()=>{part.forEach(f=>delete PHOTO_CACHE[f])});
+  }
+}
+
+/* ── 서버(Apps Script) 부르기: GET 요청 → { ok, data } ── */
+function api(query,ok,fail){
+  if(!API_URL||API_URL.includes('배포ID')){ fail(new Error('index.html 위쪽의 API_URL에 Apps Script 웹앱 주소를 넣어 주세요.')); return; }
+  const ctl=new AbortController(), tm=setTimeout(()=>ctl.abort(),25000);
+  fetch(API_URL+(API_URL.includes('?')?'&':'?')+query,{cache:'no-store',signal:ctl.signal})
+    .then(r=>{ if(!r.ok) throw new Error('서버 응답 '+r.status); return r.json(); })
+    .then(j=>{ clearTimeout(tm); j&&j.ok?ok(j.data):fail(new Error(j&&j.error||'알 수 없는 오류')); })
+    .catch(e=>{ clearTimeout(tm); fail(e.name==='AbortError'?new Error('응답이 너무 늦어요'):e); });
+}
+
+/* ── ③ 선생님 찾기: 성함 전체를 정확히 입력해야만 서버가 결과를 돌려줌 (명단은 페이지에 없음) ── */
+let tqVal='';
+function renderTbox(){
+  const B_=$('tbox'); B_.innerHTML='';
+  if(!tqVal){ const p=document.createElement('span'); p.className='ph'; p.textContent='예: 홍길동'; B_.appendChild(p); }
+  else B_.appendChild(document.createTextNode(tqVal));
+  const c=document.createElement('span'); c.className='caret'; B_.appendChild(c);
+}
+function tMsg(s,warn){ $('tmsg').textContent=s; $('tmsg').className='tmsg'+(warn?' warn':''); }
+function doFind(){
+  const name=tqVal.replace(/\s+/g,'');
+  if(name.length<2){ tMsg('성함 전체를 입력해 주세요.',true); return; }
+  tMsg('찾는 중이에요…'); $('tres').innerHTML='';
+  api('api=teacher&name='+encodeURIComponent(name),l=>showTeachers(l,name),()=>tMsg('잠시 후 다시 시도해 주세요.',true));
+}
+function guideTeacher(tc){
+  const room=tc.place?destByName(tc.place):null, home=tc.homeroom?destByName(tc.homeroom):null;
+  if(room) showGuide(room,tc); else if(home) showGuide(home,homeOf(tc)); else tMsg(tc.name+' 선생님은 안내할 위치 정보가 없어요. 행정실에 문의해 주세요.',true);
+}
+function showTeachers(list,asked){
+  if(screen!=='teacher') return; // 그 사이 처음 화면으로 돌아갔으면 무시
+  const R=$('tres'); R.innerHTML='';
+  if(!list||!list.length){ tMsg('‘'+asked+'’ 선생님을 찾지 못했어요. 성함 전체를 정확히 입력했는지 확인해 주세요.',true); return; }
+  if(list.length===1){ tMsg(''); guideTeacher(list[0]); return; }
+  tMsg('같은 성함의 선생님이 '+list.length+'분 계세요. 골라 주세요.');
+  list.forEach(tc=>{
+    const card=document.createElement('div'); card.className='tcard';
+    const h=document.createElement('b'); h.textContent=tc.name+' 선생님';
+    const info=document.createElement('div'); info.className='tinfo';
+    info.textContent=[tc.dept,tc.place,tc.homeroom?tc.homeroom+' 담임':''].filter(Boolean).join(' · ');
+    const btns=document.createElement('div'); btns.className='tbtns';
+    const room=tc.place?destByName(tc.place):null, home=tc.homeroom?destByName(tc.homeroom):null;
+    if(room){ const b=document.createElement('button'); b.type='button'; b.textContent=ro(tc.place)+' 안내'; b.addEventListener('click',()=>showGuide(room,tc)); btns.appendChild(b); }
+    if(home){ const b=document.createElement('button'); b.type='button'; b.className='alt'; b.textContent='담임 학급 '+ro(tc.homeroom)+' 안내'; b.addEventListener('click',()=>showGuide(home,homeOf(tc))); btns.appendChild(b); }
+    card.append(h,info,btns); R.appendChild(card);
+  });
+}
+
+/* 화면 한글 키보드: 입력된 글자를 자모로 풀고, 누른 자모를 더한 뒤 다시 조합 */
+const HG={
+  CHO:'ㄱㄲㄴㄷㄸㄹㅁㅂㅃㅅㅆㅇㅈㅉㅊㅋㅌㅍㅎ',
+  JUNG:'ㅏㅐㅑㅒㅓㅔㅕㅖㅗㅘㅙㅚㅛㅜㅝㅞㅟㅠㅡㅢㅣ',
+  JONG:' ㄱㄲㄳㄴㄵㄶㄷㄹㄺㄻㄼㄽㄾㄿㅀㅁㅂㅄㅅㅆㅇㅈㅊㅋㅌㅍㅎ',
+  V2:{'ㅗㅏ':'ㅘ','ㅗㅐ':'ㅙ','ㅗㅣ':'ㅚ','ㅜㅓ':'ㅝ','ㅜㅔ':'ㅞ','ㅜㅣ':'ㅟ','ㅡㅣ':'ㅢ'},
+  C2:{'ㄱㅅ':'ㄳ','ㄴㅈ':'ㄵ','ㄴㅎ':'ㄶ','ㄹㄱ':'ㄺ','ㄹㅁ':'ㄻ','ㄹㅂ':'ㄼ','ㄹㅅ':'ㄽ','ㄹㅌ':'ㄾ','ㄹㅍ':'ㄿ','ㄹㅎ':'ㅀ','ㅂㅅ':'ㅄ'}
+};
+HG.V2r={}; for(const k in HG.V2) HG.V2r[HG.V2[k]]=k;
+HG.C2r={}; for(const k in HG.C2) HG.C2r[HG.C2[k]]=k;
+const isV=j=>HG.JUNG.includes(j);
+function hgDecompose(str){
+  const out=[];
+  for(const ch of str){ const c=ch.charCodeAt(0)-0xAC00;
+    if(c>=0&&c<11172){ const cho=HG.CHO[Math.floor(c/588)], jung=HG.JUNG[Math.floor(c%588/28)], jong=HG.JONG[c%28];
+      out.push(cho); out.push(...(HG.V2r[jung]||jung).split(''));
+      if(jong!==' ') out.push(...(HG.C2r[jong]||jong).split('')); }
+    else if(HG.V2r[ch]) out.push(...HG.V2r[ch].split(''));
+    else if(HG.C2r[ch]) out.push(...HG.C2r[ch].split(''));
+    else out.push(ch);
+  }
+  return out;
+}
+function hgCompose(jamo){
+  let out='', s=null;
+  const flush=()=>{ if(!s) return;
+    if(s.cho&&s.jung) out+=String.fromCharCode(0xAC00+HG.CHO.indexOf(s.cho)*588+HG.JUNG.indexOf(s.jung)*28+(s.jong?HG.JONG.indexOf(s.jong):0));
+    else out+=(s.cho||'')+(s.jung||'');
+    s=null; };
+  for(const j of jamo){
+    if(isV(j)){
+      if(s&&s.cho&&!s.jung) s.jung=j;
+      else if(s&&s.jung&&!s.jong&&HG.V2[s.jung+j]) s.jung=HG.V2[s.jung+j];
+      else if(s&&s.jong){ const pair=HG.C2r[s.jong]; let move;
+        if(pair){ s.jong=pair[0]; move=pair[1]; } else { move=s.jong; s.jong=null; }
+        flush(); s={cho:move,jung:j};
+      } else { flush(); s={jung:j}; }
+    } else if(HG.CHO.includes(j)){
+      if(s&&s.cho&&s.jung&&!s.jong&&HG.JONG.includes(j)) s.jong=j;
+      else if(s&&s.jong&&HG.C2[s.jong+j]) s.jong=HG.C2[s.jong+j];
+      else { flush(); s={cho:j}; }
+    } else { flush(); out+=j; }
+  }
+  flush(); return out;
+}
+const KB_ROWS=[['ㅂ','ㅈ','ㄷ','ㄱ','ㅅ','ㅛ','ㅕ','ㅑ','ㅐ','ㅔ'],['ㅁ','ㄴ','ㅇ','ㄹ','ㅎ','ㅗ','ㅓ','ㅏ','ㅣ'],['⇧','ㅋ','ㅌ','ㅊ','ㅍ','ㅠ','ㅜ','ㅡ','⌫']];
+const KB_SHIFT={'ㅂ':'ㅃ','ㅈ':'ㅉ','ㄷ':'ㄸ','ㄱ':'ㄲ','ㅅ':'ㅆ','ㅐ':'ㅒ','ㅔ':'ㅖ'};
+let kbShift=false;
+function kbRender(){
+  const K=$('kbd'); K.innerHTML='';
+  KB_ROWS.forEach((row,ri)=>{ const r=document.createElement('div'); r.className='kbrow r'+ri;
+    row.forEach(k=>{ const b=document.createElement('button'); b.type='button';
+      const v=kbShift&&KB_SHIFT[k]?KB_SHIFT[k]:k; b.textContent=v; b.dataset.k=v;
+      if(k==='⇧'){ b.className='fn'+(kbShift?' on':''); b.setAttribute('aria-label','쌍자음'); }
+      if(k==='⌫'){ b.className='fn'; b.setAttribute('aria-label','한 글자 지우기'); }
+      r.appendChild(b); });
+    K.appendChild(r); });
+  const r=document.createElement('div'); r.className='kbrow r3';
+  [['전체 지우기','clear'],['띄어쓰기','space'],['찾기','go']].forEach(([t,k])=>{ const b=document.createElement('button'); b.type='button'; b.textContent=t; b.dataset.k=k; b.className='fn '+k; r.appendChild(b); });
+  K.appendChild(r);
+}
+function kbPress(k){
+  if(k==='⇧'){ kbShift=!kbShift; kbRender(); return; }
+  if(k==='go'){ doFind(); return; }
+  if(k==='clear'){ tqVal=''; renderTbox(); tMsg(''); $('tres').innerHTML=''; return; }
+  const jamo=hgDecompose(tqVal);
+  if(k==='⌫') jamo.pop(); else if(k==='space') jamo.push(' '); else if(tqVal.length<12) jamo.push(k);
+  tqVal=hgCompose(jamo); renderTbox();
+  if(kbShift&&k!=='⌫'){ kbShift=false; kbRender(); }
+}
+$('kbd').addEventListener('pointerdown',e=>{ const b=e.target.closest('button'); if(!b) return; e.preventDefault(); kbPress(b.dataset.k); });
+// 실제 키보드가 연결된 경우(관리용)도 입력 가능
+document.addEventListener('keydown',e=>{ if(screen!=='teacher') return;
+  if(e.key==='Enter'){ e.preventDefault(); doFind(); }
+  else if(e.key==='Backspace'){ e.preventDefault(); kbPress('⌫'); }
+});
+kbRender(); renderTbox();
+
+/* ── 아무도 만지지 않으면 메인 화면으로 (돌아갈 곳이 없으면 길안내 처음 화면으로) ── */
+let lastAct=Date.now();
+['pointerdown','touchstart','keydown','wheel'].forEach(ev=>document.addEventListener(ev,()=>{ lastAct=Date.now(); reportActivity(); if(!$('idle').hidden) $('idle').hidden=true; },{capture:true,passive:true}));
+$('idle').addEventListener('pointerdown',e=>{ e.preventDefault(); e.stopPropagation(); $('idle').hidden=true; lastAct=Date.now(); reportActivity(); });
+$('floors').addEventListener('scroll',()=>{ lastAct=Date.now(); reportActivity(); },{passive:true});
+setInterval(()=>{
+  if(leaving) return;
+  if(!CAN_BACK&&screen==='home'){ $('idle').hidden=true; return; }
+  const left=IDLE_SEC-(Date.now()-lastAct)/1000;
+  if(left<=0){ if(CAN_BACK) goBack(); else goHome(); }
+  else if(left<=WARN_SEC&&started){ $('idle').hidden=false; $('idleN').textContent=Math.ceil(left); }
+},250);
+
+/* ── 키오스크 보호: 확대·길게 누르기·우클릭 막기 ── */
+document.addEventListener('contextmenu',e=>e.preventDefault());
+document.addEventListener('gesturestart',e=>e.preventDefault());
+document.addEventListener('wheel',e=>{ if(e.ctrlKey) e.preventDefault(); },{passive:false});
+document.addEventListener('dragstart',e=>e.preventDefault());
+
+/* ── 시작: 시트에서 데이터 받아오기 (실패하면 자동 재시도) ── */
+let loadedAt=0, started=false;
+const SAVE_KEY='cheongam-kiosk-data';
+function useData(data){
+  buildModel(data);
+  if(!DEST.length) return false;
+  setupHome(); setupTabs();
+  if(!started){ started=true; $('loading').hidden=true; goHome(); }
+  else if(screen==='home') drawHome();
+  return true;
+}
+function loadData(silent){
+  api('api=data',data=>{
+    loadedAt=Date.now();
+    if(!useData(data)){ if(!started) failLoad('시트의 방 목록 탭이 비어 있어요.'); return; }
+    try{ localStorage.setItem(SAVE_KEY,JSON.stringify(data)); }catch(e){}
+  },err=>{ if(!silent||!started) failLoad(err&&err.message?err.message:String(err)); });
+}
+function failLoad(msg){
+  if(started) return;
+  // 인터넷이 안 돼도 마지막으로 받은 방 목록이 있으면 일단 그걸로 시작 (선생님 찾기는 연결돼야 됨)
+  try{ const saved=JSON.parse(localStorage.getItem(SAVE_KEY)||'null'); if(saved&&useData(saved)) return; }catch(e){}
+  $('loading').hidden=false;
+  $('loadMsg').textContent='안내도를 불러오지 못했어요. 잠시 후 다시 시도할게요.';
+  $('loadSub').textContent='('+msg+')';
+  setTimeout(()=>{ $('loadMsg').textContent='안내도를 불러오는 중이에요…'; loadData(); },RETRY_SEC*1000);
+}
+setInterval(()=>{ if(screen==='home') loadData(true); },REFRESH_MIN*60e3);
+// 매일 새벽(RELOAD_HOUR시)에 처음 화면이면 새로고침 → GitHub에 올린 새 화면이 자동 반영
+const bootAt=Date.now();
+setInterval(()=>{ if(screen==='home'&&new Date().getHours()===RELOAD_HOUR&&Date.now()-bootAt>2*3600e3) location.reload(); },60e3);
+window.addEventListener('resize',()=>{ if(screen==='home') drawHome(); });
+// 메인 화면에서 들어올 때마다 새로 열리므로, 저장해 둔 방 목록으로 바로 보여 주고 뒤에서 최신 내용을 받아요
+// (뒤로 가기로 다시 보일 때도 처음 화면부터)
+window.addEventListener('pageshow',e=>{ if(e.persisted){ leaving=false; lastAct=Date.now(); if(started) goHome(); } });
+(function start(){
+  let saved=null;
+  try{ saved=JSON.parse(localStorage.getItem(SAVE_KEY)||'null'); }catch(e){}
+  // 저장된 목록으로 시작하면 goHome()이 최신 내용 받기(loadData(true))를 이미 부름
+  if(!(saved&&useData(saved))) loadData();
+})();
+</script>
+</body>
+</html>
